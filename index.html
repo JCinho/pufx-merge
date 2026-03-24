@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Merge — PUFx</title>
+<style>
+/* Version: v4.0 — Tier 4 win, cliffhanger, smart board, auto-hint */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #1a1a2e;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ═══ CONTAINER — 9:16 portrait ═══ */
+#container {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(100vw, 56.25vh);
+  height: min(100vh, 177.78vw);
+  background: linear-gradient(180deg, #16213e 0%, #1a1a2e 50%, #0f0f23 100%);
+  overflow: hidden;
+}
+
+/* ═══ SCREENS ═══ */
+.screen {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: opacity 0.4s;
+  opacity: 0; pointer-events: none; z-index: 1;
+}
+.screen.active { opacity: 1; pointer-events: all; z-index: 10; }
+
+/* ═══ START SCREEN ═══ */
+#start-screen { background: radial-gradient(ellipse at 50% 35%, #1e3a5f 0%, #0f0f23 70%); }
+.start-title {
+  font-size: 8vmin; font-weight: 900; color: #fff;
+  text-align: center; text-transform: uppercase;
+  text-shadow: 0 0 40px rgba(120,80,255,0.4);
+  margin-bottom: 2vmin; line-height: 1.15;
+}
+.start-sub {
+  font-size: 3.5vmin; color: rgba(255,255,255,0.5);
+  margin-bottom: 6vmin;
+}
+.btn-play {
+  width: 55%; padding: 3.5vmin 0;
+  border: none; border-radius: 50px; cursor: pointer;
+  background: linear-gradient(135deg, #7c4dff 0%, #aa66ff 100%);
+  color: #fff; font-size: 5.5vmin; font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  box-shadow: 0 4px 25px rgba(124,77,255,0.5);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.btn-play:active { transform: scale(0.95); }
+
+@keyframes pulse {
+  0%,100% { transform: scale(1); box-shadow: 0 4px 25px rgba(124,77,255,0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 4px 40px rgba(124,77,255,0.6); }
+}
+
+/* ═══ HUD ═══ */
+.hud {
+  width: 100%; padding: 3vmin 4vmin 1.5vmin;
+  display: flex; align-items: center; gap: 3vmin;
+}
+.hud-score {
+  font-size: 3.8vmin; font-weight: 800; color: #fff;
+  display: flex; align-items: center; gap: 1.5vmin;
+}
+.hud-score .ico {
+  width: 4.5vmin; height: 4.5vmin; border-radius: 50%;
+  background: radial-gradient(circle, #ffd700, #ff9500);
+  box-shadow: 0 0 8px rgba(255,215,0,0.5);
+}
+.hud-goal {
+  flex: 1; text-align: right;
+  font-size: 3vmin; color: rgba(255,255,255,0.55); font-weight: 600;
+}
+.hud-goal b { color: #fff; }
+
+/* Progress */
+.progress-wrap {
+  width: 100%; padding: 0 4vmin 2vmin;
+}
+.progress-track {
+  width: 100%; height: 1.8vmin;
+  background: rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden;
+}
+.progress-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #7c4dff, #e040fb);
+  border-radius: 10px;
+  transition: width 0.5s cubic-bezier(.34,1.56,.64,1);
+}
+
+/* ═══ GRID ═══ */
+.grid-wrap {
+  flex: 1; display: flex; align-items: center;
+  justify-content: center; width: 100%; padding: 1vmin 3vmin;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 1.6vmin;
+  width: 100%; aspect-ratio: 5/4;
+  max-width: 90vmin; max-height: 90vmin;
+}
+.cell {
+  position: relative; border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 2px solid rgba(255,255,255,0.06);
+  aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+.cell.drop-target {
+  border-color: rgba(124,77,255,0.7);
+  background: rgba(124,77,255,0.15);
+  transform: scale(1.06);
+}
+.cell.invalid-drop {
+  animation: cell-reject 0.35s ease;
+}
+@keyframes cell-reject {
+  0%,100% { transform: scale(1); }
+  30% { transform: scale(0.92); }
+  60% { transform: scale(1.03); }
+}
+
+/* ═══ ITEM (orb / gem) ═══ */
+.item {
+  width: 82%; height: 82%;
+  border-radius: 22%;
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; color: #fff;
+  cursor: grab;
+  transition: transform 0.12s, box-shadow 0.2s;
+  will-change: transform;
+  z-index: 5;
+}
+.item:active { cursor: grabbing; }
+.item .item-level {
+  font-size: 4.5vmin;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  pointer-events: none;
+}
+
+/* Tier colors */
+.item.t1 {
+  background: linear-gradient(145deg, #2979ff 0%, #448aff 50%, #2962ff 100%);
+  border: 2px solid #64b5f6;
+  box-shadow: 0 3px 12px rgba(41,121,255,0.4);
+}
+.item.t2 {
+  background: linear-gradient(145deg, #00c853 0%, #00e676 50%, #00b248 100%);
+  border: 2px solid #69f0ae;
+  box-shadow: 0 3px 14px rgba(0,200,83,0.4);
+}
+.item.t3 {
+  background: linear-gradient(145deg, #aa00ff 0%, #d500f9 50%, #9c00e6 100%);
+  border: 2px solid #ea80fc;
+  box-shadow: 0 3px 16px rgba(170,0,255,0.4);
+}
+.item.t4 {
+  background: linear-gradient(145deg, #ff6d00 0%, #ff9100 50%, #ff5500 100%);
+  border: 2px solid #ffab40;
+  box-shadow: 0 3px 18px rgba(255,109,0,0.5);
+}
+.item.t5 {
+  background: linear-gradient(145deg, #ff6d00 0%, #ffd700 25%, #00e5ff 50%, #e040fb 75%, #ffd700 100%);
+  background-size: 300% 300%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 25px rgba(255,215,0,0.5), 0 0 50px rgba(224,64,251,0.3);
+  animation: rainbow 2.5s linear infinite;
+}
+@keyframes rainbow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
+/* Dragging */
+.item.dragging {
+  z-index: 500;
+  transform: scale(1.15);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  opacity: 0.92;
+  cursor: grabbing;
+  transition: none;
+  pointer-events: none;
+}
+.item.ghost {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+/* Merge animations */
+.item.merge-source {
+  animation: shrink-away 0.3s ease-in forwards;
+}
+.item.merge-result {
+  animation: pop-in 0.45s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+@keyframes shrink-away {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+@keyframes pop-in {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Spawn */
+.item.spawning {
+  animation: spawn-in 0.35s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+@keyframes spawn-in {
+  0% { transform: scale(0) rotate(-30deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* ═══ FLOATING TEXT ═══ */
+.float-text {
+  position: absolute; font-size: 4.5vmin; font-weight: 900;
+  pointer-events: none; z-index: 200;
+  text-shadow: 0 0 12px currentColor;
+  animation: float-up 0.9s ease-out forwards;
+}
+@keyframes float-up {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-10vmin) scale(1.4); opacity: 0; }
+}
+
+/* ═══ PARTICLES ═══ */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none; z-index: 150;
+}
+
+/* ═══ SCREEN FLASH ═══ */
+#flash {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none; z-index: 300;
+  opacity: 0; background: #fff;
+}
+
+/* ═══ SHAKE ═══ */
+.shake-1 { animation: sk1 0.2s ease; }
+.shake-2 { animation: sk2 0.3s ease; }
+.shake-3 { animation: sk3 0.4s ease; }
+@keyframes sk1 {
+  0%,100%{transform:translate(-50%,-50%)} 25%{transform:translate(calc(-50% + 2px),calc(-50% - 1px))} 75%{transform:translate(calc(-50% - 2px),calc(-50% + 1px))}
+}
+@keyframes sk2 {
+  0%,100%{transform:translate(-50%,-50%)} 20%{transform:translate(calc(-50% + 3px),calc(-50% - 3px))} 40%{transform:translate(calc(-50% - 3px),calc(-50% + 2px))} 60%{transform:translate(calc(-50% + 2px),calc(-50% - 2px))} 80%{transform:translate(calc(-50% - 1px),calc(-50% + 1px))}
+}
+@keyframes sk3 {
+  0%,100%{transform:translate(-50%,-50%)} 15%{transform:translate(calc(-50% + 5px),calc(-50% - 4px))} 30%{transform:translate(calc(-50% - 4px),calc(-50% + 5px))} 45%{transform:translate(calc(-50% + 4px),calc(-50% - 3px))} 60%{transform:translate(calc(-50% - 3px),calc(-50% + 3px))} 75%{transform:translate(calc(-50% + 2px),calc(-50% - 1px))}
+}
+
+/* ═══ CTA FOOTER ═══ */
+.cta-footer {
+  width: 100%; padding: 1.5vmin 4vmin 3vmin;
+  display: flex; justify-content: center;
+}
+.btn-cta-small {
+  padding: 2vmin 6vmin;
+  border: 2px solid rgba(124,77,255,0.3);
+  border-radius: 50px;
+  background: rgba(124,77,255,0.1);
+  color: rgba(124,77,255,0.5);
+  font-size: 3.2vmin; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  cursor: pointer; transition: all 0.5s;
+}
+.btn-cta-small.live {
+  border-color: #7c4dff;
+  background: linear-gradient(135deg, #7c4dff, #aa66ff);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(124,77,255,0.5);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* ═══ WIN / LOSE SCREEN ═══ */
+#win-screen, #lose-screen {
+  background: radial-gradient(ellipse at 50% 40%, #1e3a5f 0%, #0f0f23 70%);
+  padding: 6vmin 5vmin;
+  gap: 0;
+}
+.end-title {
+  font-size: 9vmin; font-weight: 900;
+  text-align: center;
+  text-shadow: 0 0 40px currentColor;
+  animation: pop-in 0.5s cubic-bezier(.34,1.56,.64,1);
+  margin-bottom: 4vmin;
+}
+#win-screen .end-title { color: #ffd700; }
+#lose-screen .end-title { color: #ff9100; }
+.end-sub {
+  font-size: 4vmin; color: rgba(255,255,255,0.6);
+  margin-bottom: 4vmin; text-align: center;
+}
+
+/* Auto-hint pulse */
+.item.hint-pulse {
+  animation: hint-glow 0.8s ease-in-out infinite alternate;
+}
+@keyframes hint-glow {
+  0% { filter: brightness(1); transform: scale(1); }
+  100% { filter: brightness(1.4); transform: scale(1.08); box-shadow: 0 0 20px currentColor; }
+}
+.end-stats {
+  display: flex; gap: 8vmin;
+  margin-bottom: 5vmin;
+}
+.end-stat {
+  display: flex; flex-direction: column; align-items: center;
+}
+.end-stat-label {
+  font-size: 3vmin; color: rgba(255,255,255,0.5);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 1vmin;
+}
+.end-stat-val {
+  font-size: 6vmin; font-weight: 900; color: #fff;
+}
+.btn-cta-big {
+  width: 75%; padding: 3.5vmin 0;
+  border: none; border-radius: 50px; cursor: pointer;
+  background: linear-gradient(135deg, #7c4dff, #aa66ff);
+  color: #fff; font-size: 4.5vmin; font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  box-shadow: 0 4px 25px rgba(124,77,255,0.5);
+  animation: pulse 1.6s ease-in-out infinite;
+  margin-bottom: 2vmin;
+}
+.btn-cta-big:active { transform: scale(0.95); }
+.btn-retry {
+  padding: 2vmin 6vmin;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 50px; cursor: pointer;
+  background: transparent;
+  color: rgba(255,255,255,0.6);
+  font-size: 3.5vmin; font-weight: 700;
+  text-transform: uppercase;
+}
+.btn-retry:active { transform: scale(0.95); }
+
+/* Board full warning */
+.grid.warning {
+  animation: board-warn 0.6s ease;
+}
+@keyframes board-warn {
+  0%,100% { box-shadow: none; }
+  50% { box-shadow: inset 0 0 30px rgba(255,64,129,0.4); }
+}
+.cell.danger {
+  background: rgba(255,64,129,0.08);
+  border-color: rgba(255,64,129,0.25);
+}
+
+/* confetti */
+.confetti {
+  position: absolute; pointer-events: none; z-index: 200;
+  animation: conf-fall linear forwards;
+}
+@keyframes conf-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(115vh) rotate(720deg); opacity: 0; }
+}
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="flash"></div>
+
+  <!-- START -->
+  <div class="screen active" id="start-screen">
+    <div class="start-title">Merge!</div>
+    <div class="start-sub">Drag & merge to reach max level</div>
+    <button class="btn-play" id="btn-play">PLAY</button>
+  </div>
+
+  <!-- GAME -->
+  <div class="screen" id="game-screen">
+    <div class="hud">
+      <div class="hud-score"><span class="ico"></span><span id="score">0</span></div>
+      <div class="hud-goal">Goal: <b>Level 5</b></div>
+    </div>
+    <div class="progress-wrap"><div class="progress-track"><div class="progress-bar" id="pbar"></div></div></div>
+    <div class="grid-wrap"><div class="grid" id="grid"></div></div>
+    <div class="cta-footer"><button class="btn-cta-small" id="btn-cta-s" onclick="handleCTA()">Download</button></div>
+  </div>
+
+  <!-- WIN -->
+  <div class="screen" id="win-screen">
+    <div class="end-title">MAX LEVEL!</div>
+    <div class="end-stats">
+      <div class="end-stat">
+        <span class="end-stat-label">Score</span>
+        <span class="end-stat-val" id="win-score-val">0</span>
+      </div>
+      <div class="end-stat">
+        <span class="end-stat-label">Merges</span>
+        <span class="end-stat-val" id="win-merges-val">0</span>
+      </div>
+    </div>
+    <button class="btn-cta-big" onclick="handleCTA()">Play Full Game!</button>
+    <button class="btn-retry" onclick="startGame()">Play Again</button>
+  </div>
+
+  <!-- CLIFFHANGER (replaces lose) -->
+  <div class="screen" id="lose-screen">
+    <div class="end-title" id="lose-title">So Close!</div>
+    <div class="end-sub" id="lose-sub">You almost made it!</div>
+    <div class="end-stats">
+      <div class="end-stat">
+        <span class="end-stat-label">Score</span>
+        <span class="end-stat-val" id="lose-score-val">0</span>
+      </div>
+      <div class="end-stat">
+        <span class="end-stat-label">Best Tier</span>
+        <span class="end-stat-val" id="lose-best-val">3</span>
+      </div>
+    </div>
+    <button class="btn-cta-big" onclick="handleCTA()">Continue Playing!</button>
+    <button class="btn-retry" onclick="startGame()">Try Again</button>
+  </div>
+</div>
+
+<script>
+// Version: v4.0 — Tier 4 win, cliffhanger interrupt, smart board, auto-hint
+(function(){
+'use strict';
+
+// ═══ CONFIG ═══
+const COLS = 5, ROWS = 4, CELLS = COLS * ROWS;
+const MAX_TIER = 5;                // Win at tier 5
+const INITIAL_FILL = 12;          // items on start (20 cells, ~60% filled)
+const SPAWN_COUNT = 2;            // items spawned after each merge (+1 net per move)
+const HINT_DELAY = 1500;          // ms before auto-hint pulses a valid merge
+const TIER_COLORS = {
+  1: '#448aff', 2: '#00e676', 3: '#d500f9',
+  4: '#ff9100', 5: '#ffd700'
+};
+const TIER_POINTS = { 1: 0, 2: 10, 3: 30, 4: 80, 5: 200 };
+const STORE_URL = 'https://play.google.com/store/apps/details?id=com.example';
+
+// ═══ STATE ═══
+let grid = new Array(CELLS).fill(null);   // null or tier number
+let score = 0;
+let mergeCount = 0;
+let maxReached = 0;
+let dragging = null;
+let busy = false;
+let hintTimer = null;
+
+// ═══ DOM ═══
+const $ = id => document.getElementById(id);
+const cont = $('container');
+const gridEl = $('grid');
+const flash = $('flash');
+
+// ═══ SCREENS ═══
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(name + '-screen').classList.add('active');
+}
+
+// ═══ START ═══
+$('btn-play').onclick = startGame;
+
+function startGame() {
+  grid.fill(null);
+  score = 0;
+  mergeCount = 0;
+  maxReached = 0;
+  busy = false;
+  if (hintTimer) clearTimeout(hintTimer);
+  $('score').textContent = '0';
+  $('pbar').style.width = '0%';
+  $('btn-cta-s').classList.remove('live');
+
+  // Semi-scripted board: guarantee adjacent pairs for first moves
+  seedBoard();
+
+  showScreen('game');
+  renderGrid();
+  scheduleHint();
+}
+
+function seedBoard() {
+  // All tier 1 only — forces longer path to tier 4 (min ~7 merges)
+  // Guarantee 3 adjacent pairs for obvious first moves
+  const placed = new Set();
+
+  // Pair 1: row 1, cols 1-2
+  const p1a = 1 * COLS + 1, p1b = 1 * COLS + 2;
+  grid[p1a] = 1; grid[p1b] = 1;
+  placed.add(p1a); placed.add(p1b);
+
+  // Pair 2: row 2, cols 3-4
+  const p2a = 2 * COLS + 3, p2b = 2 * COLS + 4;
+  grid[p2a] = 1; grid[p2b] = 1;
+  placed.add(p2a); placed.add(p2b);
+
+  // Pair 3: row 0, cols 3-4
+  const p3a = 0 * COLS + 3, p3b = 0 * COLS + 4;
+  grid[p3a] = 1; grid[p3b] = 1;
+  placed.add(p3a); placed.add(p3b);
+
+  // Fill remaining slots with mix of tier 1 and tier 2
+  const remaining = [];
+  for (let i = 0; i < CELLS; i++) if (!placed.has(i)) remaining.push(i);
+  shuffle(remaining);
+  const toFill = INITIAL_FILL - placed.size;
+  for (let i = 0; i < toFill; i++) {
+    grid[remaining[i]] = Math.random() < 0.65 ? 1 : 2;
+  }
+}
+
+// ═══ GRID RENDER ═══
+function renderGrid() {
+  gridEl.innerHTML = '';
+  for (let i = 0; i < CELLS; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.idx = i;
+
+    if (grid[i] !== null) {
+      const item = makeItem(grid[i]);
+      item.dataset.idx = i;
+      cell.appendChild(item);
+    }
+    gridEl.appendChild(cell);
+  }
+  updateProgress();
+}
+
+function makeItem(tier) {
+  const el = document.createElement('div');
+  el.className = `item t${tier}`;
+  el.innerHTML = `<span class="item-level">${tier}</span>`;
+  return el;
+}
+
+// ═══ ADJACENCY ═══
+function isAdjacent(a, b) {
+  const ra = Math.floor(a / COLS), ca = a % COLS;
+  const rb = Math.floor(b / COLS), cb = b % COLS;
+  return (Math.abs(ra - rb) + Math.abs(ca - cb)) === 1;
+}
+
+// ═══ DRAG AND DROP ═══
+// Works for both mouse and touch
+
+document.addEventListener('mousedown', onPointerDown);
+document.addEventListener('mousemove', onPointerMove);
+document.addEventListener('mouseup', onPointerUp);
+document.addEventListener('touchstart', onPointerDown, { passive: false });
+document.addEventListener('touchmove', onPointerMove, { passive: false });
+document.addEventListener('touchend', onPointerUp, { passive: false });
+
+function getXY(e) {
+  if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  if (e.changedTouches && e.changedTouches.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
+function onPointerDown(e) {
+  if (busy) return;
+  const pt = getXY(e);
+  const itemEl = e.target.closest('.item');
+  if (!itemEl || itemEl.classList.contains('ghost')) return;
+  e.preventDefault();
+
+  const idx = parseInt(itemEl.dataset.idx);
+  if (idx === undefined || grid[idx] === null) return;
+
+  const rect = itemEl.getBoundingClientRect();
+  const contRect = cont.getBoundingClientRect();
+
+  // Create floating clone
+  const clone = itemEl.cloneNode(true);
+  clone.classList.add('dragging');
+  clone.style.position = 'absolute';
+  clone.style.width = rect.width + 'px';
+  clone.style.height = rect.height + 'px';
+  clone.style.left = (rect.left - contRect.left) + 'px';
+  clone.style.top = (rect.top - contRect.top) + 'px';
+  cont.appendChild(clone);
+
+  // Ghost original
+  itemEl.classList.add('ghost');
+
+  clearHint();
+  dragging = {
+    idx,
+    tier: grid[idx],
+    el: clone,
+    ghost: itemEl,
+    offsetX: pt.x - rect.left - rect.width / 2,
+    offsetY: pt.y - rect.top - rect.height / 2,
+    startX: rect.left - contRect.left,
+    startY: rect.top - contRect.top,
+  };
+
+  highlightDropTargets(true);
+}
+
+function onPointerMove(e) {
+  if (!dragging) return;
+  e.preventDefault();
+  const pt = getXY(e);
+  const contRect = cont.getBoundingClientRect();
+  dragging.el.style.left = (pt.x - contRect.left - dragging.el.offsetWidth / 2) + 'px';
+  dragging.el.style.top = (pt.y - contRect.top - dragging.el.offsetHeight / 2) + 'px';
+
+  // Highlight cell under pointer
+  updateDropHighlight(pt);
+}
+
+function onPointerUp(e) {
+  if (!dragging) return;
+  e.preventDefault();
+  const pt = getXY(e);
+  const targetIdx = getCellUnder(pt);
+
+  highlightDropTargets(false);
+
+  // Valid drop?
+  if (targetIdx !== null && targetIdx !== dragging.idx &&
+      grid[targetIdx] === dragging.tier && dragging.tier < MAX_TIER &&
+      isAdjacent(dragging.idx, targetIdx)) {
+    // Merge! (adjacent only)
+    doMerge(dragging.idx, targetIdx);
+  } else if (targetIdx !== null && targetIdx !== dragging.idx &&
+             grid[targetIdx] === null) {
+    // Move to empty cell
+    grid[targetIdx] = grid[dragging.idx];
+    grid[dragging.idx] = null;
+    cleanupDrag();
+    renderGrid();
+    // Check if board full + no merges after move
+    if (isBoardFull() && !hasAnyMerge()) {
+      setTimeout(() => loseGame(), 500);
+    } else {
+      scheduleHint();
+    }
+  } else {
+    // Snap back
+    cleanupDrag();
+    renderGrid();
+    scheduleHint();
+  }
+}
+
+function cleanupDrag() {
+  if (dragging) {
+    dragging.el.remove();
+    if (dragging.ghost) dragging.ghost.classList.remove('ghost');
+    dragging = null;
+  }
+}
+
+function highlightDropTargets(show) {
+  if (!dragging) return;
+  const cells = gridEl.children;
+  for (let i = 0; i < CELLS; i++) {
+    cells[i].classList.remove('drop-target');
+    if (show && i !== dragging.idx && grid[i] === dragging.tier && dragging.tier < MAX_TIER && isAdjacent(dragging.idx, i)) {
+      cells[i].classList.add('drop-target');
+    }
+  }
+}
+
+function updateDropHighlight(pt) {
+  // Extra highlight on the cell directly under pointer
+  const idx = getCellUnder(pt);
+  const cells = gridEl.children;
+  for (let i = 0; i < CELLS; i++) {
+    if (i !== dragging.idx && grid[i] === dragging.tier && dragging.tier < MAX_TIER && isAdjacent(dragging.idx, i)) {
+      cells[i].classList.toggle('drop-target', true);
+    }
+  }
+}
+
+function getCellUnder(pt) {
+  const cells = gridEl.children;
+  for (let i = 0; i < CELLS; i++) {
+    const r = cells[i].getBoundingClientRect();
+    if (pt.x >= r.left && pt.x <= r.right && pt.y >= r.top && pt.y <= r.bottom) {
+      return i;
+    }
+  }
+  return null;
+}
+
+// ═══ MERGE ═══
+function doMerge(fromIdx, toIdx) {
+  busy = true;
+  const oldTier = grid[fromIdx];
+  const newTier = oldTier + 1;
+
+  // Remove source
+  grid[fromIdx] = null;
+  grid[toIdx] = newTier;
+
+  // Points
+  score += TIER_POINTS[newTier];
+  mergeCount++;
+  $('score').textContent = score;
+
+  // Track max tier
+  if (newTier > maxReached) {
+    maxReached = newTier;
+    if (maxReached >= 3) $('btn-cta-s').classList.add('live');
+  }
+
+  // Cleanup drag visuals
+  cleanupDrag();
+
+  // Render with merge animation
+  renderGrid();
+
+  const targetCell = gridEl.children[toIdx];
+  const targetItem = targetCell.querySelector('.item');
+  if (targetItem) targetItem.classList.add('merge-result');
+
+  // SFX + VFX
+  playMergeSound(newTier);
+  const intensity = Math.min(newTier - 1, 3);
+  doFlash(intensity);
+  doShake(intensity);
+  spawnParticles(targetCell, intensity, TIER_COLORS[newTier]);
+  spawnFloat(targetCell, `+${TIER_POINTS[newTier]}`, TIER_COLORS[newTier]);
+
+  updateProgress();
+
+  // Check win
+  if (newTier >= MAX_TIER) {
+    setTimeout(() => winGame(), 700);
+    return;
+  }
+
+  // Spawn new items (creates board pressure)
+  setTimeout(() => {
+    for (let s = 0; s < SPAWN_COUNT; s++) {
+      spawnNewItem();
+    }
+    // Check board full after spawns
+    if (isBoardFull()) {
+      if (hasAnyMerge()) {
+        // Board full but merges exist — show warning
+        gridEl.classList.add('warning');
+        setTimeout(() => gridEl.classList.remove('warning'), 600);
+        busy = false;
+        scheduleHint();
+      } else {
+        // No merges possible — cliffhanger
+        setTimeout(() => loseGame(), 500);
+      }
+    } else {
+      busy = false;
+      scheduleHint();
+    }
+  }, 400);
+}
+
+function spawnNewItem() {
+  const empties = [];
+  for (let i = 0; i < CELLS; i++) if (grid[i] === null) empties.push(i);
+  if (!empties.length) return;
+
+  const idx = empties[Math.floor(Math.random() * empties.length)];
+  grid[idx] = Math.random() < 0.75 ? 1 : 2;
+
+  renderGrid();
+  const cell = gridEl.children[idx];
+  const item = cell.querySelector('.item');
+  if (item) item.classList.add('spawning');
+
+  // Visual warning when board is getting full
+  const emptyCount = empties.length - 1; // -1 because we just filled one
+  if (emptyCount <= 4) {
+    // Mark empty cells as danger
+    for (let i = 0; i < CELLS; i++) {
+      if (grid[i] === null) {
+        gridEl.children[i].classList.add('danger');
+      }
+    }
+  }
+}
+
+function isBoardFull() {
+  return grid.every(c => c !== null);
+}
+
+function hasAnyMerge() {
+  // Check if any adjacent same-tier pair exists
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const idx = r * COLS + c;
+      const tier = grid[idx];
+      if (tier === null || tier >= MAX_TIER) continue;
+      // Check right
+      if (c < COLS - 1 && grid[idx + 1] === tier) return true;
+      // Check down
+      if (r < ROWS - 1 && grid[idx + COLS] === tier) return true;
+    }
+  }
+  return false;
+}
+
+// ═══ PROGRESS ═══
+function updateProgress() {
+  const pct = Math.min(100, (maxReached / MAX_TIER) * 100);
+  $('pbar').style.width = pct + '%';
+}
+
+// ═══ WIN ═══
+function winGame() {
+  if (hintTimer) clearTimeout(hintTimer);
+  $('win-score-val').textContent = score;
+  $('win-merges-val').textContent = mergeCount;
+  showScreen('win');
+  playWinSound();
+  spawnConfetti();
+}
+
+// ═══ CLIFFHANGER (replaces lose) ═══
+function loseGame() {
+  if (hintTimer) clearTimeout(hintTimer);
+  $('lose-score-val').textContent = score;
+  $('lose-best-val').textContent = maxReached;
+  // Dynamic cliffhanger messaging based on progress
+  if (maxReached >= MAX_TIER - 1) {
+    $('lose-title').textContent = 'So Close!';
+    $('lose-sub').textContent = 'One more merge to win!';
+  } else if (maxReached >= 2) {
+    $('lose-title').textContent = 'Almost There!';
+    $('lose-sub').textContent = 'Can you reach Level ' + MAX_TIER + '?';
+  } else {
+    $('lose-title').textContent = 'Board Full!';
+    $('lose-sub').textContent = 'Try a different strategy!';
+  }
+  showScreen('lose');
+}
+
+// ═══ AUTO-HINT ═══
+function scheduleHint() {
+  clearHint();
+  hintTimer = setTimeout(() => {
+    if (busy || dragging) { scheduleHint(); return; }
+    // Find first valid adjacent merge and pulse both items
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const idx = r * COLS + c;
+        const tier = grid[idx];
+        if (tier === null || tier >= MAX_TIER) continue;
+        // Check right
+        if (c < COLS - 1 && grid[idx + 1] === tier) {
+          pulseHint(idx, idx + 1);
+          return;
+        }
+        // Check down
+        if (r < ROWS - 1 && grid[idx + COLS] === tier) {
+          pulseHint(idx, idx + COLS);
+          return;
+        }
+      }
+    }
+  }, HINT_DELAY);
+}
+
+function pulseHint(a, b) {
+  const cells = gridEl.children;
+  const itemA = cells[a] && cells[a].querySelector('.item');
+  const itemB = cells[b] && cells[b].querySelector('.item');
+  if (itemA) itemA.classList.add('hint-pulse');
+  if (itemB) itemB.classList.add('hint-pulse');
+  // Stop pulsing after 2 seconds, then reschedule
+  setTimeout(() => {
+    if (itemA) itemA.classList.remove('hint-pulse');
+    if (itemB) itemB.classList.remove('hint-pulse');
+    scheduleHint();
+  }, 2000);
+}
+
+function clearHint() {
+  if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+  // Remove any active hint pulses
+  document.querySelectorAll('.hint-pulse').forEach(el => el.classList.remove('hint-pulse'));
+}
+
+// ═══ AUDIO — Web Audio API synthesis ═══
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playMergeSound(newTier) {
+  const ctx = getAudio();
+  const now = ctx.currentTime;
+  // Each tier = more notes, higher pitch, richer harmonics
+  const configs = {
+    2: { notes: [523], dur: 0.15, vol: 0.12, type: 'sine' },           // C5 — simple pop
+    3: { notes: [587, 784], dur: 0.18, vol: 0.14, type: 'sine' },      // D5 + G5 — two-note chime
+    4: { notes: [659, 880, 1175], dur: 0.22, vol: 0.16, type: 'triangle' }, // E5 + A5 + D6 — arpeggio chord
+    5: { notes: [784, 988, 1319, 1568], dur: 0.3, vol: 0.18, type: 'sine' } // G5+B5+E6+G6 — full sparkle
+  };
+  const cfg = configs[newTier] || configs[2];
+
+  cfg.notes.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = cfg.type;
+    osc.frequency.value = freq;
+    // Stagger notes slightly for arpeggio feel
+    const start = now + i * 0.06;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(cfg.vol, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + cfg.dur);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + cfg.dur + 0.05);
+  });
+}
+
+function playWinSound() {
+  const ctx = getAudio();
+  const now = ctx.currentTime;
+  // Victory fanfare — ascending major chord arpeggio
+  [523, 659, 784, 1047].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const start = now + i * 0.12;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.15, start + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.55);
+  });
+}
+
+// ═══ VFX ═══
+function doFlash(intensity) {
+  const ops = [0.1, 0.2, 0.35, 0.6];
+  flash.style.opacity = ops[intensity] || 0.2;
+  setTimeout(() => { flash.style.opacity = 0; }, 80);
+}
+
+function doShake(intensity) {
+  const cls = ['shake-1','shake-1','shake-2','shake-3'];
+  cont.classList.add(cls[intensity]);
+  setTimeout(() => cont.classList.remove(cls[intensity]), 500);
+}
+
+function spawnParticles(anchor, intensity, color) {
+  const counts = [6, 12, 20, 35];
+  const n = counts[intensity] || 8;
+  const rect = anchor.getBoundingClientRect();
+  const cr = cont.getBoundingClientRect();
+  const cx = rect.left - cr.left + rect.width / 2;
+  const cy = rect.top - cr.top + rect.height / 2;
+
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const c = i % 3 === 0 ? '#fff' : color;
+    p.style.background = c;
+    p.style.left = cx + 'px';
+    p.style.top = cy + 'px';
+    const sz = 3 + Math.random() * 5;
+    p.style.width = sz + 'px';
+    p.style.height = sz + 'px';
+    cont.appendChild(p);
+
+    const angle = (Math.PI * 2 / n) * i + (Math.random() - 0.5);
+    const dist = 25 + Math.random() * 50 * (1 + intensity * 0.4);
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+    const dur = 350 + Math.random() * 350;
+
+    p.animate([
+      { transform: 'translate(0,0) scale(1)', opacity: 1 },
+      { transform: `translate(${dx}px,${dy}px) scale(0)`, opacity: 0 }
+    ], { duration: dur, easing: 'ease-out', fill: 'forwards' });
+
+    setTimeout(() => p.remove(), dur + 50);
+  }
+}
+
+function spawnFloat(anchor, text, color) {
+  const el = document.createElement('div');
+  el.className = 'float-text';
+  el.textContent = text;
+  el.style.color = color;
+  const rect = anchor.getBoundingClientRect();
+  const cr = cont.getBoundingClientRect();
+  el.style.left = (rect.left - cr.left + rect.width / 2 - 15) + 'px';
+  el.style.top = (rect.top - cr.top) + 'px';
+  cont.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+
+function spawnConfetti() {
+  const colors = ['#7c4dff','#ffd700','#00e676','#ff4081','#448aff','#e040fb','#ff9100','#fff'];
+  for (let i = 0; i < 60; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + '%';
+    c.style.top = '-5%';
+    c.style.background = colors[Math.floor(Math.random() * colors.length)];
+    c.style.width = (5 + Math.random() * 7) + 'px';
+    c.style.height = (8 + Math.random() * 12) + 'px';
+    c.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+    c.style.animationDelay = Math.random() * 0.8 + 's';
+    c.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    cont.appendChild(c);
+    setTimeout(() => c.remove(), 4500);
+  }
+}
+
+// ═══ UTIL ═══
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// ═══ EXPOSE FOR HTML BUTTONS ═══
+window.startGame = startGame;
+
+// ═══ CTA ═══
+window.handleCTA = function() {
+  if (typeof mraid !== 'undefined') mraid.open(STORE_URL);
+  else if (typeof FbPlayableAd !== 'undefined') FbPlayableAd.onCTAClick();
+  else window.open(STORE_URL, '_blank');
+};
+
+})();
+</script>
+</body>
+</html>
