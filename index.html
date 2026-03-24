@@ -483,7 +483,7 @@ function showScreen(name) {
 
 // ═══ START ═══
 $('btn-play').onclick = function() {
-  warmUpAudio();
+  getAudio();  // Unlock audio context on first tap
   playClick();
   startGame();
 };
@@ -912,91 +912,74 @@ function clearHint() {
 }
 
 // ═══ AUDIO — Web Audio API synthesis ═══
+// All audio wrapped in try-catch — never blocks gameplay
 let audioCtx = null;
-let audioReady = false;
 function getAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
-}
-
-function warmUpAudio() {
-  // Play a silent buffer to prime the audio pipeline
-  // Fixes first-sound-missing bug on mobile
-  const ctx = getAudio();
-  const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.connect(ctx.destination);
-  src.start(0);
-  audioReady = true;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  } catch(e) { return null; }
 }
 
 function playClick() {
-  const ctx = getAudio();
-  const now = ctx.currentTime;
-  // Subtle tick — short noise burst
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.value = 1200;
-  gain.gain.setValueAtTime(0.06, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(now);
-  osc.stop(now + 0.08);
-}
-
-function playMergeSound(newTier) {
-  const ctx = getAudio();
-  const now = ctx.currentTime;
-  // Each tier = more notes, higher pitch, richer harmonics
-  const configs = {
-    2: { notes: [523], dur: 0.15, vol: 0.12, type: 'sine' },           // C5 — simple pop
-    3: { notes: [587, 784], dur: 0.18, vol: 0.14, type: 'sine' },      // D5 + G5 — two-note chime
-    4: { notes: [659, 880, 1175], dur: 0.22, vol: 0.16, type: 'triangle' }, // E5 + A5 + D6 — arpeggio chord
-    5: { notes: [784, 988, 1319, 1568], dur: 0.3, vol: 0.18, type: 'sine' } // G5+B5+E6+G6 — full sparkle
-  };
-  const cfg = configs[newTier] || configs[2];
-
-  cfg.notes.forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = cfg.type;
-    osc.frequency.value = freq;
-    // Stagger notes slightly for arpeggio feel
-    const start = now + i * 0.06;
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(cfg.vol, start + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, start + cfg.dur);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(start);
-    osc.stop(start + cfg.dur + 0.05);
-  });
-}
-
-function playWinSound() {
-  const ctx = getAudio();
-  const now = ctx.currentTime;
-  // Victory fanfare — ascending major chord arpeggio
-  [523, 659, 784, 1047].forEach((freq, i) => {
+  const ctx = getAudio(); if (!ctx) return;
+  try {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.value = freq;
-    const start = now + i * 0.12;
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.15, start + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(start);
-    osc.stop(start + 0.55);
-  });
+    osc.frequency.value = 1200;
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.08);
+  } catch(e) {}
+}
+
+function playMergeSound(newTier) {
+  const ctx = getAudio(); if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const configs = {
+      2: { notes: [523], dur: 0.15, vol: 0.12, type: 'sine' },
+      3: { notes: [587, 784], dur: 0.18, vol: 0.14, type: 'sine' },
+      4: { notes: [659, 880, 1175], dur: 0.22, vol: 0.16, type: 'triangle' },
+      5: { notes: [784, 988, 1319, 1568], dur: 0.3, vol: 0.18, type: 'sine' }
+    };
+    const cfg = configs[newTier] || configs[2];
+    cfg.notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = cfg.type;
+      osc.frequency.value = freq;
+      const start = now + i * 0.06;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(cfg.vol, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + cfg.dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(start); osc.stop(start + cfg.dur + 0.05);
+    });
+  } catch(e) {}
+}
+
+function playWinSound() {
+  const ctx = getAudio(); if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    [523, 659, 784, 1047].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = now + i * 0.12;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.15, start + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(start); osc.stop(start + 0.55);
+    });
+  } catch(e) {}
 }
 
 // ═══ VFX ═══
