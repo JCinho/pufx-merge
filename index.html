@@ -403,7 +403,7 @@ html, body {
     </div>
     <div class="progress-wrap"><div class="progress-track"><div class="progress-bar" id="pbar"></div></div></div>
     <div class="grid-wrap"><div class="grid" id="grid"></div></div>
-    <div class="cta-footer"><button class="btn-cta-small" id="btn-cta-s" onclick="handleCTA()">Download</button></div>
+    <div class="cta-footer"><button class="btn-cta-small" id="btn-cta-s" onclick="playClick();handleCTA()">Download</button></div>
   </div>
 
   <!-- WIN -->
@@ -419,8 +419,8 @@ html, body {
         <span class="end-stat-val" id="win-merges-val">0</span>
       </div>
     </div>
-    <button class="btn-cta-big" onclick="handleCTA()">Play Full Game!</button>
-    <button class="btn-retry" onclick="startGame()">Play Again</button>
+    <button class="btn-cta-big" onclick="playClick();handleCTA()">Play Full Game!</button>
+    <button class="btn-retry" onclick="playClick();startGame()">Play Again</button>
   </div>
 
   <!-- CLIFFHANGER (replaces lose) -->
@@ -437,8 +437,8 @@ html, body {
         <span class="end-stat-val" id="lose-best-val">3</span>
       </div>
     </div>
-    <button class="btn-cta-big" onclick="handleCTA()">Continue Playing!</button>
-    <button class="btn-retry" onclick="startGame()">Try Again</button>
+    <button class="btn-cta-big" onclick="playClick();handleCTA()">Continue Playing!</button>
+    <button class="btn-retry" onclick="playClick();startGame()">Try Again</button>
   </div>
 </div>
 
@@ -483,8 +483,8 @@ function showScreen(name) {
 
 // ═══ START ═══
 $('btn-play').onclick = function() {
-  // Unlock audio on first user interaction (required on mobile)
-  getAudio();
+  warmUpAudio();
+  playClick();
   startGame();
 };
 
@@ -913,13 +913,41 @@ function clearHint() {
 
 // ═══ AUDIO — Web Audio API synthesis ═══
 let audioCtx = null;
+let audioReady = false;
 function getAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // Mobile unlock: resume suspended context
-    if (audioCtx.state === 'suspended') audioCtx.resume();
   }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
+}
+
+function warmUpAudio() {
+  // Play a silent buffer to prime the audio pipeline
+  // Fixes first-sound-missing bug on mobile
+  const ctx = getAudio();
+  const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(0);
+  audioReady = true;
+}
+
+function playClick() {
+  const ctx = getAudio();
+  const now = ctx.currentTime;
+  // Subtle tick — short noise burst
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 1200;
+  gain.gain.setValueAtTime(0.06, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.08);
 }
 
 function playMergeSound(newTier) {
@@ -1060,6 +1088,7 @@ function shuffle(arr) {
 
 // ═══ EXPOSE FOR HTML BUTTONS ═══
 window.startGame = startGame;
+window.playClick = playClick;
 
 // ═══ CTA ═══
 window.handleCTA = function() {
