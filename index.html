@@ -921,6 +921,16 @@ function getAudio() {
     return audioCtx;
   } catch(e) { return null; }
 }
+// Unlock audio on very first touch/click anywhere on the page
+// so the context is fully resumed by the time PLAY is tapped
+document.addEventListener('touchstart', function unlock() {
+  getAudio();
+  document.removeEventListener('touchstart', unlock);
+}, { once: true });
+document.addEventListener('mousedown', function unlock() {
+  getAudio();
+  document.removeEventListener('mousedown', unlock);
+}, { once: true });
 
 function playClick() {
   const ctx = getAudio(); if (!ctx) return;
