@@ -482,7 +482,11 @@ function showScreen(name) {
 }
 
 // ═══ START ═══
-$('btn-play').onclick = startGame;
+$('btn-play').onclick = function() {
+  // Unlock audio on first user interaction (required on mobile)
+  getAudio();
+  startGame();
+};
 
 function startGame() {
   grid.fill(null);
@@ -910,7 +914,11 @@ function clearHint() {
 // ═══ AUDIO — Web Audio API synthesis ═══
 let audioCtx = null;
 function getAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Mobile unlock: resume suspended context
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
   return audioCtx;
 }
 
