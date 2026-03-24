@@ -483,7 +483,7 @@ function showScreen(name) {
 
 // ═══ START ═══
 $('btn-play').onclick = function() {
-  getAudio();  // Unlock audio context on first tap
+  initAudio();
   playClick();
   startGame();
 };
@@ -911,46 +911,68 @@ function clearHint() {
   document.querySelectorAll('.hint-pulse').forEach(el => el.classList.remove('hint-pulse'));
 }
 
-// ═══ AUDIO — Web Audio API synthesis ═══
-// All audio wrapped in try-catch — never blocks gameplay
+// ═══ AUDIO — iOS-safe Web Audio synthesis ═══
+// Pattern: heartbeat + aggressive resume + anchored gains
 let audioCtx = null;
-function getAudio() {
+let audioUnlocked = false;
+
+function initAudio() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    return audioCtx;
-  } catch(e) { return null; }
+
+    // Start heartbeat oscillator: 1Hz at near-zero gain
+    // Keeps iOS audio thread alive during silent moments
+    if (!audioUnlocked && audioCtx.state === 'running') {
+      const hb = audioCtx.createOscillator();
+      const hbGain = audioCtx.createGain();
+      hb.frequency.value = 1;
+      hbGain.gain.value = 0.0001;
+      hb.connect(hbGain);
+      hbGain.connect(audioCtx.destination);
+      hb.start(0);
+      audioUnlocked = true;
+    }
+  } catch(e) {}
 }
-// Unlock audio on very first touch/click anywhere on the page
-// so the context is fully resumed by the time PLAY is tapped
-document.addEventListener('touchstart', function unlock() {
-  getAudio();
-  document.removeEventListener('touchstart', unlock);
-}, { once: true });
-document.addEventListener('mousedown', function unlock() {
-  getAudio();
-  document.removeEventListener('mousedown', unlock);
-}, { once: true });
+
+// Resume on EVERY touch/pointer/mouse — iOS can re-suspend anytime
+['touchstart', 'pointerdown', 'mousedown'].forEach(evt => {
+  document.addEventListener(evt, () => {
+    if (!audioCtx) initAudio();
+    else if (audioCtx.state === 'suspended') {
+      try { audioCtx.resume(); } catch(e) {}
+    }
+  }, { capture: true, passive: true });
+});
+
+// Resume on tab/app return
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && audioCtx && audioCtx.state === 'suspended') {
+    try { audioCtx.resume(); } catch(e) {}
+  }
+}, { passive: true });
 
 function playClick() {
-  const ctx = getAudio(); if (!ctx) return;
+  if (!audioCtx || audioCtx.state !== 'running') return;
   try {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const t = audioCtx.currentTime + 0.001;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.value = 1200;
-    const now = ctx.currentTime;
-    gain.gain.setValueAtTime(0.06, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(now); osc.stop(now + 0.08);
+    osc.frequency.setValueAtTime(1200, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(0.06, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.08);
   } catch(e) {}
 }
 
 function playMergeSound(newTier) {
-  const ctx = getAudio(); if (!ctx) return;
+  if (!audioCtx || audioCtx.state !== 'running') return;
   try {
-    const now = ctx.currentTime;
+    const t = audioCtx.currentTime + 0.001;
     const configs = {
       2: { notes: [523], dur: 0.15, vol: 0.12, type: 'sine' },
       3: { notes: [587, 784], dur: 0.18, vol: 0.14, type: 'sine' },
@@ -959,35 +981,34 @@ function playMergeSound(newTier) {
     };
     const cfg = configs[newTier] || configs[2];
     cfg.notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
       osc.type = cfg.type;
-      osc.frequency.value = freq;
-      const start = now + i * 0.06;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(cfg.vol, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + cfg.dur);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(start); osc.stop(start + cfg.dur + 0.05);
+      osc.frequency.setValueAtTime(freq, t + i * 0.06);
+      // Anchored envelope: explicit start → ramp up → ramp down
+      gain.gain.setValueAtTime(0.0001, t + i * 0.06);
+      gain.gain.linearRampToValueAtTime(cfg.vol, t + i * 0.06 + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.06 + cfg.dur);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t + i * 0.06); osc.stop(t + i * 0.06 + cfg.dur + 0.05);
     });
   } catch(e) {}
 }
 
 function playWinSound() {
-  const ctx = getAudio(); if (!ctx) return;
+  if (!audioCtx || audioCtx.state !== 'running') return;
   try {
-    const now = ctx.currentTime;
+    const t = audioCtx.currentTime + 0.001;
     [523, 659, 784, 1047].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
       osc.type = 'sine';
-      osc.frequency.value = freq;
-      const start = now + i * 0.12;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.15, start + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(start); osc.stop(start + 0.55);
+      osc.frequency.setValueAtTime(freq, t + i * 0.12);
+      gain.gain.setValueAtTime(0.0001, t + i * 0.12);
+      gain.gain.linearRampToValueAtTime(0.15, t + i * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.5);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t + i * 0.12); osc.stop(t + i * 0.12 + 0.55);
     });
   } catch(e) {}
 }
